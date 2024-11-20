@@ -1,0 +1,95 @@
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# Step 1: Load the image
+image_path = r"c:\Users\a.bodimeade.RFA\OneDrive - Redfox Advisory\Documents\Alec's Work Documents\Tristan's Work\Diagrams to Coordinates\Pictured Graphs\Figure C.1a.png"
+image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+
+if image is None:
+    print("Error: Image not found. Check the file path.")
+    exit()
+
+# Step 2: Preprocess the image
+_, thresholded = cv2.threshold(image, 128, 255, cv2.THRESH_BINARY_INV)
+edges = cv2.Canny(thresholded, 50, 150)
+
+# Visualize the preprocessing steps
+plt.figure(figsize=(15, 5))
+plt.subplot(131)
+plt.imshow(image, cmap='gray')
+plt.title('Original Image')
+
+plt.subplot(132)
+plt.imshow(thresholded, cmap='gray')
+plt.title('Thresholded Image')
+
+plt.subplot(133)
+plt.imshow(edges, cmap='gray')
+plt.title('Edges')
+plt.show()
+
+# Step 3: Detect contours
+contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+print(f"Contours found: {len(contours)}")
+
+# Add debugging information
+print("Starting coordinate mapping...")
+
+# Step 4: Map contours to coordinates
+coordinates = []
+total_points = 0
+for i, contour in enumerate(contours):
+    if i % 50 == 0:  # Print progress every 50 contours
+        print(f"Processing contour {i}/{len(contours)}")
+    
+    # Subsample points from each contour to reduce processing
+    step = max(1, len(contour) // 10)  # Take roughly 10 points per contour
+    for point in contour[::step]:
+        x_pixel, y_pixel = point[0]
+        x_graph = x_pixel / image.shape[1] * 10  # Adjust X-axis mapping
+        y_graph = (1 - y_pixel / image.shape[0])  # Adjust Y-axis mapping
+        coordinates.append((x_graph, y_graph))
+        total_points += 1
+
+print(f"Total points extracted: {total_points}")
+
+# Limit the number of points more aggressively
+max_points = 500  # Reduced from 1000
+if len(coordinates) > max_points:
+    step = len(coordinates) // max_points
+    coordinates = coordinates[::step]
+    print(f"Reduced to {len(coordinates)} points for visualization")
+
+if not coordinates:
+    print("No coordinates were extracted. Check preprocessing or image quality.")
+    exit()
+
+# Extract X and Y data
+x_data, y_data = zip(*coordinates)
+
+# Step 5: Plot extracted points (subsampling for speed)
+plt.scatter(x_data, y_data, label="Extracted Points", color="blue", s=2)  # Smaller points
+plt.xlabel("X-axis (Scaled)")
+plt.ylabel("Y-axis (Scaled)")
+
+# Remove the axis lines but keep the ticks and labels
+plt.gca().spines['top'].set_visible(False)
+plt.gca().spines['right'].set_visible(False)
+plt.gca().spines['left'].set_visible(False)
+plt.gca().spines['bottom'].set_visible(False)
+
+plt.grid()  # Optional, adds gridlines
+plt.legend()
+plt.show()
+
+# Step 6: Export coordinates to Excel
+data_to_export = {"X Values": x_data, "Y Values": y_data}
+df = pd.DataFrame(data_to_export)
+
+# Save to Excel file (local directory to avoid cloud sync delays)
+output_path = r"C:\Temp\coordinates_output.xlsx"
+df.to_excel(output_path, index=False, engine="openpyxl")
+
+print(f"Coordinates have been saved to: {output_path}")

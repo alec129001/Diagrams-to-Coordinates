@@ -1,0 +1,86 @@
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+import os
+from pathlib import Path
+
+# Get the absolute path of the script's directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+print(f"Script directory: {script_dir}")
+
+# Construct the image path relative to the script location
+image_path = os.path.join(script_dir, "Pictured Graphs", "Figure C.1a.png")
+print(f"Attempting to load image from: {image_path}")
+
+# Check if file exists
+print(f"File exists: {os.path.exists(image_path)}")
+
+# Try to load the image
+image = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
+
+if image is None:
+    print("Error: Image not found. Check the file path.")
+    exit()
+
+# Print current working directory
+print(f"Current working directory: {os.getcwd()}")
+
+# Check if file exists
+print(f"File exists: {os.path.exists(image_path)}")
+
+# Step 2: Crop the image to focus on the graph area
+# Adjust these values based on your image - these are estimates
+y_start = 200  # Skip the top portion with text
+y_end = 900    # Skip the bottom portion with text
+x_start = 100  # Skip the left margin and y-axis
+x_end = 700    # Skip the right margin
+cropped_image = image[y_start:y_end, x_start:x_end]
+
+# Step 2b: Preprocess the cropped image
+_, thresholded = cv2.threshold(cropped_image, 128, 255, cv2.THRESH_BINARY_INV)
+edges = cv2.Canny(thresholded, 50, 150)
+
+# Step 3: Detect contours
+contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+print(f"Contours found: {len(contours)}")
+
+# Step 4: Map contours to coordinates
+coordinates = []
+for contour in contours:
+    # Filter out horizontal and vertical lines (likely axes)
+    x, y, w, h = cv2.boundingRect(contour)
+    if w/h > 5 or h/w > 5:  # Skip if the contour is very long and thin
+        continue
+        
+    for point in contour:
+        x_pixel, y_pixel = point[0]
+        # Scale coordinates to match the actual graph ranges
+        x_graph = (x_pixel / cropped_image.shape[1]) * 10
+        y_graph = 1 - (y_pixel / cropped_image.shape[0])  # Invert Y axis
+        coordinates.append((x_graph, y_graph))
+
+# Filter coordinates to reduce noise
+coordinates.sort(key=lambda x: x[0])  # Sort by x value
+x_data, y_data = zip(*coordinates)
+
+# Create the final plot
+plt.figure(figsize=(10, 8))
+plt.scatter(x_data, y_data, s=1, color='blue', alpha=0.5)
+plt.xlim(0, 10)
+plt.ylim(0, 1)
+plt.xlabel('L/D')
+plt.ylabel('In')
+plt.grid(True, linestyle='--', alpha=0.7)
+plt.title('Extracted Graph Data')
+plt.show()
+
+# Step 6: Export coordinates to Excel
+data_to_export = {"X Values": x_data, "Y Values": y_data}
+df = pd.DataFrame(data_to_export)
+
+# Save to Excel file (local directory to avoid cloud sync delays)
+output_path = r"Outputs"
+df.to_excel(output_path, index=False, engine="openpyxl")
+
+print(f"Coordinates have been saved to: {output_path}")
